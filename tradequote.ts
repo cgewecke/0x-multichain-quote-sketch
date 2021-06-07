@@ -26,8 +26,12 @@ const ethers = hre.ethers;
 const network = hre.network;
 
 const { TradeModule__factory } = require("@setprotocol/set-protocol-v2/dist/typechain/factories/TradeModule__factory");
+const { SetToken__factory } = require("@setprotocol/set-protocol-v2/dist/typechain/factories/SetToken__factory");
 // @ts-ignore
 let tradeModule;
+let setToken;
+
+const DPI_MANAGER = "0x0dea6d942a2d8f594844f973366859616dd5ea50";
 
 type Address = string;
 
@@ -171,8 +175,12 @@ class TradeQuoteGenerator {
       fromTokenRequestAmount,
       setOnChainDetails.manager,
       (setOnChainDetails as any).totalSupply, // Typings incorrect,
-      chainId
+      chainId,
+      fromAddress,
     );
+
+    console.log('fromTokenRequestAmount --> ' + fromTokenRequestAmount);
+    console.log('fromUnits --> ' + fromUnits);
 
     // Sanity check response from quote APIs
     this.validateQuoteValues(
@@ -268,6 +276,7 @@ class TradeQuoteGenerator {
     manager: Address,
     setTotalSupply: BigNumber,
     chainId: number,
+    setTokenAddress: Address
   ) {
     const zeroEx = new ZeroExTradeQuoter({
       chainId: chainId,
@@ -286,6 +295,14 @@ class TradeQuoteGenerator {
 
     const fromTokenAmount = quote.sellAmount;
     const fromUnits = (fromTokenAmount.mul(SCALE)).div(setTotalSupply);
+
+    const fromTokenAmountBigInt = BigInt(quote.sellAmount.toString());
+    const scaleBigInt = BigInt(SCALE.toString());
+    const setTotalSupplyBigInt = BigInt(setTotalSupply.toString())
+    const fromUnitsBigInt = (fromTokenAmountBigInt * scaleBigInt) / setTotalSupplyBigInt;
+
+    console.log('fromUnits --> ' + fromUnits);
+    console.log('fromUnitsBigInt --> ' + fromUnitsBigInt);
 
     const toTokenAmount = quote.buyAmount;
 
@@ -367,8 +384,7 @@ class TradeQuoteGenerator {
     } else {
       // ((amount * SCALE / totalsupply).floor * totalsupply / SCALE).floor
       const amountMulScaleOverTotalSupply = amount.mul(SCALE).div(totalSupply); // .floor;
-      const totalSupplyOverScale = totalSupply.div(SCALE);
-      return amountMulScaleOverTotalSupply.mul(totalSupplyOverScale); // .floor;
+      return amountMulScaleOverTotalSupply.mul(totalSupply).div(SCALE); // .floor;
     }
   }
 
@@ -520,8 +536,6 @@ async function main(){
     governanceModuleAddress: "0x5C87b042494cDcebA44C541fbB3BC8bFF179d500",
     debtIssuanceModuleAddress: "0x39F024d621367C044BacE2bf0Fb15Fb3612eCB92",
   }
-
-  const DPI_MANAGER = "0x0dea6d942a2d8f594844f973366859616dd5ea50";
 
   await network.provider.request({
     method: "hardhat_impersonateAccount",
