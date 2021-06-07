@@ -2,6 +2,7 @@ require("dotenv").config();
 
 import axios from "axios";
 import { BigNumber, FixedNumber, providers, Wallet } from "ethers";
+import BigDecimal from "js-big-decimal";
 
 import {
   CoinGeckoDataService,
@@ -294,15 +295,16 @@ class TradeQuoteGenerator {
     );
 
     const fromTokenAmount = quote.sellAmount;
-    const fromUnits = (fromTokenAmount.mul(SCALE)).div(setTotalSupply);
 
-    const fromTokenAmountBigInt = BigInt(quote.sellAmount.toString());
-    const scaleBigInt = BigInt(SCALE.toString());
-    const setTotalSupplyBigInt = BigInt(setTotalSupply.toString())
-    const fromUnitsBigInt = (fromTokenAmountBigInt * scaleBigInt) / setTotalSupplyBigInt;
+    // Convert to BigDecimal to get cieling in fromUnits calculation
+    // This is necessary to derive the trade amount ZeroEx expects when scaling is
+    // done in the TradeModule contract. (ethers.FixedNumber does not work for this case)
+    const fromTokenAmountBD = new BigDecimal(fromTokenAmount.toString());
+    const scaleBD = new BigDecimal(SCALE.toString());
+    const setTotalSupplyBD = new BigDecimal(setTotalSupply.toString());
 
-    console.log('fromUnits --> ' + fromUnits);
-    console.log('fromUnitsBigInt --> ' + fromUnitsBigInt);
+    const fromUnitsBD = fromTokenAmountBD.multiply(scaleBD).divide(setTotalSupplyBD, 10).ceil();
+    const fromUnits = BigNumber.from(fromUnitsBD.getValue());
 
     const toTokenAmount = quote.buyAmount;
 
@@ -373,7 +375,7 @@ class TradeQuoteGenerator {
     }
 
     const totalSupply = setOnChainDetails.totalSupply;
-    const impliedMaxNotional = positionForFromToken.unit.mul(totalSupply).div(SCALE); // .floor;
+    const impliedMaxNotional = positionForFromToken.unit.mul(totalSupply).div(SCALE);
     const isGreaterThanMax = amount.gt(impliedMaxNotional);
     const isMax = amount.eq(impliedMaxNotional);
 
@@ -382,9 +384,8 @@ class TradeQuoteGenerator {
     } else if (isMax) {
       return impliedMaxNotional.toString();
     } else {
-      // ((amount * SCALE / totalsupply).floor * totalsupply / SCALE).floor
-      const amountMulScaleOverTotalSupply = amount.mul(SCALE).div(totalSupply); // .floor;
-      return amountMulScaleOverTotalSupply.mul(totalSupply).div(SCALE); // .floor;
+      const amountMulScaleOverTotalSupply = amount.mul(SCALE).div(totalSupply);
+      return amountMulScaleOverTotalSupply.mul(totalSupply).div(SCALE);
     }
   }
 
@@ -439,11 +440,11 @@ class TradeQuoteGenerator {
     const chainCurrencyAddress = this.chainCurrencyAddress(chainId);
     const coinPrice = coinPrices[chainCurrencyAddress][USD_CURRENCY_CODE];
     const cost = totalGasCost * coinPrice;
-    const maximumSignificantDigits = (chainId === 137) ? 7 : 2;
 
+    // Polygon prices are low - using 4 significant digits here so something besides zero appears
     return new Intl.NumberFormat(
       'en-US',
-      {style: 'currency', currency: 'USD', maximumSignificantDigits }
+      {style: 'currency', currency: 'USD', maximumSignificantDigits: 4 }
     ).format(cost);
   }
 
