@@ -2,7 +2,6 @@ require("dotenv").config();
 
 import axios from "axios";
 import { BigNumber, FixedNumber, providers, Wallet } from "ethers";
-import BN from "bn.js";
 
 import {
   CoinGeckoDataService,
@@ -288,11 +287,6 @@ class TradeQuoteGenerator {
     const fromTokenAmount = quote.sellAmount;
     const fromUnits = (fromTokenAmount.mul(SCALE)).div(setTotalSupply);
 
-    const fromTokenAmountBN = new BN(fromTokenAmount.toString());
-    const scaleBN = new BN(SCALE.toString());
-    const setTotalSupplyBN = new BN(setTotalSupply.toString());
-
-    const fromUnitsBN = fromTokenAmountBN.mul(scaleBN).div(setTotalSupplyBN);
     const toTokenAmount = quote.buyAmount;
 
     // BigNumber does not do fixed point math & FixedNumber underflows w/ numbers less than 1
